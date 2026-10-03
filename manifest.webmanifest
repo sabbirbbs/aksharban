@@ -1,0 +1,21 @@
+{
+  "name": "অক্ষরবন — The Bangla Garden of Everything",
+  "short_name": "অক্ষরবন",
+  "lang": "bn",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#e6eddb",
+  "theme_color": "#edf2e6",
+  "description": "বাংলা অক্ষরের সম্ভাবনায় একটি অনন্ত বাগান।",
+  "id": "./",
+  "scope": "./",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

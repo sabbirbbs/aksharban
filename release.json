@@ -1,0 +1,16 @@
+{
+  "version": "2.0.2",
+  "layout": 2,
+  "contentAddress": "ab1",
+  "release": "6105354b357d7394",
+  "assets": {
+    "core.js": "core.40eb3e92e0ee.js",
+    "worker.js": "worker.68967a67fc71.js",
+    "app.js": "app.d3291868629a.js",
+    "navigation.js": "navigation.de203a4b99d7.js",
+    "garden-model.js": "garden-model.be1f13bb1659.js",
+    "garden.js": "garden.b8199bf16564.js",
+    "explorer.js": "explorer.acdfaf12a532.js",
+    "styles.css": "styles.b7bc9282aea9.css"
+  }
+}
