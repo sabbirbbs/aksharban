@@ -19,7 +19,7 @@ function busy(value){state.busy=value;if(value)overlayHost().append($('#loading'
 function locationText(l){return `বৃক্ষ ${short(l.tree)} · ডাল ${bn(l.bough)} · শাখা ${bn(l.branch)} · পাতা ${bn(l.leaf)}`;}
 function hideDialogs(){for(const d of $$('dialog[open]'))d.close();}
 function showDialog(d){if(d.open)return;hideDialogs();d.showModal();}
-function closeReader(){hideDialogs();if(state.result)window.AksharExplorer?.show({...state.result.location,level:'leaf'});}
+function closeReader(){hideDialogs();if(state.result)window.AksharExplorer?.show({...window.AksharExplorer.state(),...state.result.location,level:'leaf'});}
 for(const d of $$('dialog')){d.addEventListener('click',e=>{if(e.target!==d)return;const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom){if(d.id==='reader')closeReader();else d.close();}});d.addEventListener('close',()=>{document.body.classList.toggle('reader-open',!!$('#reader').open);overlayHost().append($('#toast'),$('#loading'));window.dispatchEvent(new Event('akshar-dialog-close'));});}
 $('#reader').addEventListener('cancel',e=>{e.preventDefault();closeReader();});
 function branchRange(){return C.branchRange(state.result.address);}
@@ -64,10 +64,10 @@ function open(address,opts){return run('open',[address],opts);}
 function inputCount(){const text=$('#query').value.replace(/\r\n?/g,'\n').normalize('NFC');$('#inputMeta').textContent=bn(Array.from(text).length)+' / ৩,২০০ ইউনিকোড চিহ্ন';}
 // All three actions share direct activation; no native form submission is needed.
 function bindAction(formSelector,buttonSelector,inputSelector,action){
- const form=$(formSelector),button=$(buttonSelector),input=$(inputSelector);button.type='button';
+ const form=$(formSelector),button=$(buttonSelector),inputs=$$(inputSelector);button.type='button';
  const activate=e=>{e.preventDefault();action();};
  button.addEventListener('click',activate);
- input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229&&!(e.shiftKey&&input.tagName==='TEXTAREA'))activate(e);});
+ for(const input of inputs)input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229&&!(e.shiftKey&&input.tagName==='TEXTAREA'))activate(e);});
  form.addEventListener('submit',activate);
 }
 async function searchFromInput(){
@@ -134,7 +134,7 @@ $('#aboutTop').addEventListener('click',()=>{$('#alphabetPreview').textContent=C
 $('#resetCamera').addEventListener('click',()=>window.AksharGarden?.reset());
 let low=innerWidth<700;$('#qualityToggle').setAttribute('aria-pressed',String(low));$('#qualityToggle').textContent=low?'আরও বিস্তারিত':'হালকা দৃশ্য';$('#qualityToggle').addEventListener('click',e=>{low=!low;e.currentTarget.setAttribute('aria-pressed',String(low));e.currentTarget.textContent=low?'আরও বিস্তারিত':'হালকা দৃশ্য';window.AksharGarden?.quality(low);});
 $('#themeToggle').addEventListener('click',()=>{const night=document.body.classList.toggle('night');$('#themeToggle').textContent=night?'☀':'☾';$('#themeToggle').setAttribute('aria-label',night?'দিনের বাগান দেখো':'রাতের বাগান দেখো');window.AksharGarden?.night(night);});
-window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();hideDialogs();$('#query').focus();}if(document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;const dir={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(dir&&window.AksharExplorer?.state().level==='forest'){e.preventDefault();window.AksharGarden?.move(...dir);}});
+window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();hideDialogs();$('#query').focus();}if(document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;});
 function validHighlight(h){return N.highlight(h);}
 $('#firstLeaf').addEventListener('click',()=>open(C.formatAddress(branchRange().start)));
 $('#lastLeaf').addEventListener('click',()=>{const r=branchRange();open(C.formatAddress(r.start+BigInt(r.count-1)));});
@@ -158,6 +158,6 @@ $('#downloadBranch').addEventListener('click',async()=>{
  }catch(e){toast(e.message);}finally{state.exporting=false;$('#downloadBranch').disabled=false;$('#branchProgress').hidden=true;}
 });
 try{const saved=JSON.parse(localStorage.getItem('aksharban-recents-v1')||'[]');if(Array.isArray(saved))state.recents=saved.filter(b=>{try{C.parseAddress(b.address);return true;}catch{return false;}}).slice(0,30);}catch{}
-window.AksharApp={open,copy,toast,bn,short,hideDialogs,writeHash,cancelPending(){++jobID;busy(false);}};
+window.AksharApp={open,copy,toast,bn,short,hideDialogs,writeHash,bindAction,cancelPending(){++jobID;busy(false);}};
 loadBookmarks();
 })();

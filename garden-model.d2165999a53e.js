@@ -5,6 +5,18 @@
   const SIZE=19, mod=(n,m)=>(n%m+m)%m;
   function treeAt(x,z){return mod(C.pair(BigInt(x),BigInt(z)),C.TREES);}
   function locate(tree){return C.unpair(typeof tree==='bigint'?tree:C.fromBase36(tree));}
+  function coordinate(value){
+    const s=String(value).trim().replace(/[০-৯]/g,c=>'০১২৩৪৫৬৭৮৯'.indexOf(c));
+    if(!/^[+-]?\d+$/.test(s))throw Error('স্থানাঙ্কে বাংলা বা ইংরেজি পূর্ণসংখ্যা দাও; ঋণাত্মক সংখ্যাও চলবে।');
+    return BigInt(s);
+  }
+  // Integer world coordinates never pass through Number. Only the fraction of one cell does.
+  function cursor(x=0n,z=0n,mx=0,mz=0){return {x:BigInt(x),z:BigInt(z),mx,mz};}
+  function shift(p,dx,dz){
+    if(!Number.isFinite(dx)||!Number.isFinite(dz)||Math.abs(dx)>1e6||Math.abs(dz)>1e6)throw Error('Invalid travel distance');
+    const x=p.mx+dx,z=p.mz+dz,ix=Math.floor(x+.5),iz=Math.floor(z+.5);
+    return cursor(p.x+BigInt(ix),p.z+BigInt(iz),x-ix,z-iz);
+  }
   function slot(index){return {bough:Math.floor(index/160)+1,branch:Math.floor(index%160/32)+1,leaf:index%32+1};}
   function leafIndex(loc){return ((loc.bough-1)*5+loc.branch-1)*32+loc.leaf-1;}
   function treeModel(id){
@@ -33,5 +45,5 @@
     }
     return {limbs,leaves,height};
   }
-  const api={SIZE,treeAt,locate,slot,leafIndex,treeModel};root.GardenModel=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  const api={SIZE,treeAt,locate,coordinate,cursor,shift,slot,leafIndex,treeModel};root.GardenModel=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

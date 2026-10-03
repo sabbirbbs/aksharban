@@ -6,11 +6,18 @@ const levels=['forest','tree','bough','branch','leaf'];
 function validate(s){
  const level=s.level||'forest';if(!levels.includes(level))throw Error('এই দৃশ্যটি সঠিক নয়।');
  const tree=String(s.tree??'0');if(C.fromBase36(tree)>=C.TREES)throw Error('গাছের ঠিকানা সঠিক নয়।');
- const out={level,tree};for(const [key,max] of [['bough',4],['branch',5],['leaf',32]]){const n=Number(s[key]??1);if(!Number.isInteger(n)||n<1||n>max)throw Error('ডাল বা পাতার নম্বর সঠিক নয়।');out[key]=n;}if(level!=='forest'){C.at(tree,level==='tree'?1:out.bough,['tree','bough'].includes(level)?1:out.branch,level==='leaf'?out.leaf:1);}return out;
+ const out={level,tree};for(const [key,max] of [['bough',4],['branch',5],['leaf',32]]){const n=Number(s[key]??1);if(!Number.isInteger(n)||n<1||n>max)throw Error('ডাল বা পাতার নম্বর সঠিক নয়।');out[key]=n;}if(level!=='forest'){C.at(tree,level==='tree'?1:out.bough,['tree','bough'].includes(level)?1:out.branch,level==='leaf'?out.leaf:1);}
+ if(s.x!=null||s.z!=null){
+  const x=String(s.x),z=String(s.z);if(!/^-?\d+$/.test(x)||!/^-?\d+$/.test(z))throw Error('বাগানের স্থানাঙ্ক সঠিক নয়।');
+  if(C.pair(BigInt(x),BigInt(z))%C.TREES!==C.fromBase36(tree))throw Error('গাছ ও স্থানাঙ্ক মিলছে না।');
+  out.x=BigInt(x).toString();out.z=BigInt(z).toString();
+  if(level==='forest')for(const key of ['mx','mz']){const n=Number(s[key]??0);if(!Number.isFinite(n)||n<-.5||n>=.5)throw Error('বাগানের অবস্থান সঠিক নয়।');out[key]=n;}
+ }
+ return out;
 }
-function descend(s,choice){s=validate(s);if(s.level==='forest')return validate({...s,level:'tree',tree:String(choice)});if(s.level==='tree')return validate({...s,level:'bough',bough:choice,branch:1,leaf:1});if(s.level==='bough')return validate({...s,level:'branch',branch:choice,leaf:1});if(s.level==='branch')return validate({...s,level:'leaf',leaf:choice});return s;}
+function descend(s,choice){s=validate(s);if(s.level==='forest'){const target=typeof choice==='object'?choice:{tree:String(choice)};return validate({level:'tree',...target,bough:1,branch:1,leaf:1});}if(s.level==='tree')return validate({...s,level:'bough',bough:choice,branch:1,leaf:1});if(s.level==='bough')return validate({...s,level:'branch',branch:choice,leaf:1});if(s.level==='branch')return validate({...s,level:'leaf',leaf:choice});return s;}
 function parent(s){s=validate(s);return {...s,level:levels[Math.max(0,levels.indexOf(s.level)-1)]};}
-function hashBrowse(s){s=validate(s);const p=new URLSearchParams({v:'2',view:s.level,t:s.tree,b:String(s.bough),r:String(s.branch),l:String(s.leaf)});return '#'+p.toString();}
+function hashBrowse(s){s=validate(s);const p=new URLSearchParams({v:'2',view:s.level,t:s.tree,b:String(s.bough),r:String(s.branch),l:String(s.leaf)});if(s.x!=null){p.set('x',s.x);p.set('z',s.z);if(s.level==='forest'){p.set('mx',s.mx);p.set('mz',s.mz);}}return '#'+p.toString();}
 function highlight(h){return h&&Number.isInteger(h.start)&&Number.isInteger(h.length)&&h.start>=0&&h.length>0&&h.start+h.length<=3200?{start:h.start,length:h.length}:null;}
 function hashPage(address,h){C.parseAddress(address);const p=new URLSearchParams({a:address});h=highlight(h);if(h){p.set('s',h.start);p.set('n',h.length);}return '#'+p.toString();}
 function parse(value){
@@ -18,7 +25,7 @@ function parse(value){
  if(hash.includes('#'))hash=hash.slice(hash.indexOf('#')+1);const p=new URLSearchParams(hash);
  if(p.has('a')){const address=p.get('a');C.parseAddress(address);return {kind:'page',address,highlight:highlight({start:Number(p.get('s')),length:Number(p.get('n'))})};}
  if(p.has('view')){
-  const s=validate({level:p.get('view'),tree:p.get('t')||'0',bough:p.get('b')||1,branch:p.get('r')||1,leaf:p.get('l')||1});
+  const s=validate({level:p.get('view'),tree:p.get('t')||'0',bough:p.get('b')||1,branch:p.get('r')||1,leaf:p.get('l')||1,...(p.has('x')||p.has('z')?{x:p.get('x'),z:p.get('z'),mx:p.get('mx')??0,mz:p.get('mz')??0}:{})});
   if(p.get('v')==='2')return {kind:'browse',state:s};
   if(p.has('v'))throw Error('এই লিংকের বাগান সংস্করণটি সমর্থিত নয়।');
   // Legacy visual leaves represented 410 pages. Keep their first content page reachable.
