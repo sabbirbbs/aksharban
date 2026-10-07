@@ -1,6 +1,7 @@
 (function(){
   'use strict';
   const T=window.THREE,C=window.BabelCore,G=window.GardenModel,root=document.getElementById('world');
+  let ready=false;
   let cx=0n,cz=0n,mx=0,mz=0,focusTree=0n,selected=null,renderer=null,night=false,interaction='pan';
   let low=matchMedia('(max-width:700px)').matches,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   const label=n=>{const s=String(n);return s.length>18?s.slice(0,8)+'…'+s.slice(-6):s;};
@@ -8,23 +9,24 @@
   function current(){return {...scope,x:cx.toString(),z:cz.toString(),...(scope.level==='forest'?{mx,mz}:{})};}
   function announce(){focusTree=G.treeAt(cx,cz);document.getElementById('groveTitle').textContent=cx===0n&&cz===0n?'প্রথম প্রাঙ্গণ · চারদিকে পথ খোলা':'দিগন্তের পথে';document.getElementById('worldLocation').textContent='X '+label(cx)+' · Z '+label(cz);}
   function send(){window.dispatchEvent(new CustomEvent('akshar-grove-change',{detail:{state:current(),replace:travelActive&&travelRecorded}}));if(travelActive)travelRecorded=true;}
-  let rebuild=()=>{},reposition=()=>{},reset=()=>{},setLight=()=>{},refocus=()=>{},zoom=()=>{},stats=()=>({renderedTrees:0,detailedTrees:0});
-  const api={tree:()=>focusTree,coords:()=>[cx,cz],state:current,stats:()=>stats(),
-    begin(){if(travelActive)return;travelActive=true;travelChanged=false;travelRecorded=false;},
+  let transition=()=>refocus(),rebuild=()=>{},reposition=()=>{},reset=()=>{},setLight=()=>{},refocus=()=>{},zoom=factor=>{if(factor>1&&scope.level!=='forest')window.AksharExplorer?.zoomOut();},stats=()=>({renderedTrees:0,detailedTrees:0});
+  const api={available:()=>ready,tree:()=>focusTree,coords:()=>[cx,cz],state:current,stats:()=>stats(),
+    begin(){window.dispatchEvent(new Event('akshar-manual-view'));if(travelActive)return;travelActive=true;travelChanged=false;travelRecorded=false;},
     finish(commit=true){if(commit&&travelActive&&travelChanged)send();travelActive=false;travelChanged=false;travelRecorded=false;},
     shift(dx,dz){if(scope.level!=='forest')return;const p=G.shift(G.cursor(cx,cz,mx,mz),dx,dz),changed=p.x!==cx||p.z!==cz;cx=p.x;cz=p.z;mx=p.mx;mz=p.mz;scope={...scope,tree:G.treeAt(cx,cz).toString(36)};travelChanged=true;announce();if(changed){rebuild();send();}else reposition();},
-    move(dx,dz){this.finish();cx+=BigInt(dx);cz+=BigInt(dz);mx=mz=0;scope={...scope,level:'forest',tree:G.treeAt(cx,cz).toString(36)};selected=null;announce();rebuild();send();},
-    browse(value){travelActive=false;travelChanged=false;scope={...value};focusTree=C.fromBase36(scope.tree);[cx,cz]=scope.x!=null?[BigInt(scope.x),BigInt(scope.z)]:G.locate(focusTree);mx=scope.level==='forest'?(scope.mx||0):0;mz=scope.level==='forest'?(scope.mz||0):0;selected=scope.level==='leaf'?scope:null;announce();rebuild();refocus();},
+    move(dx,dz){window.dispatchEvent(new Event('akshar-manual-view'));this.finish();cx+=BigInt(dx);cz+=BigInt(dz);mx=mz=0;scope={...scope,level:'forest',tree:G.treeAt(cx,cz).toString(36)};selected=null;announce();rebuild();send();},
+    browse(value,{animate=true}={}){travelActive=false;travelChanged=false;scope={...value};focusTree=C.fromBase36(scope.tree);[cx,cz]=scope.x!=null?[BigInt(scope.x),BigInt(scope.z)]:G.locate(focusTree);mx=scope.level==='forest'?(scope.mx||0):0;mz=scope.level==='forest'?(scope.mz||0):0;selected=scope.level==='leaf'?scope:null;announce();rebuild();transition(animate);},
     home(){this.browse({level:'forest',tree:'0',bough:1,branch:1,leaf:1});},
     interaction(value){interaction=value==='orbit'?'orbit':'pan';if(renderer)renderer.domElement.style.cursor=interaction==='pan'?'grab':'move';},
-    reset:()=>{reset();refocus();},zoom:factor=>zoom(factor),
+    reset:()=>{reset();refocus();},zoom:(factor,options)=>zoom(factor,options),
     quality(value){low=value;if(renderer){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio||1,1.75));rebuild();}},night(value){night=value;setLight();}};
   window.AksharGarden=api;announce();
-  function fallback(error){console.warn('3D unavailable; text navigation remains available.',error?.message||'');document.getElementById('worldFallback').hidden=false;if(renderer)renderer.domElement.style.display='none';}
+  function fallback(error){ready=false;console.warn('3D unavailable; text navigation remains available.',error?.message||'');document.getElementById('worldFallback').hidden=false;if(renderer)renderer.domElement.style.display='none';}
   if(!T){fallback();return;}
   try{
     const scene=new T.Scene(),fog=new T.FogExp2(0xd4e0c6,.022);scene.fog=fog;
     renderer=new T.WebGLRenderer({antialias:!low,alpha:true,powerPreference:'default'});renderer.setPixelRatio(low?1:Math.min(devicePixelRatio||1,1.75));renderer.setSize(root.clientWidth,root.clientHeight);renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.2;root.appendChild(renderer.domElement);
+    ready=true;
     renderer.domElement.setAttribute('aria-label','বনের মধ্যে চলতে টেনে নাও; গাছে চাপলে ডাল, শাখা ও পাতা খুলবে');
     const camera=new T.PerspectiveCamera(45,root.clientWidth/root.clientHeight,.1,150);
     const hemi=new T.HemisphereLight(0xfff8db,0x5c7854,2.5),sun=new T.DirectionalLight(0xffe9ab,2.9),fill=new T.DirectionalLight(0xaccec2,1.4);sun.position.set(-9,18,10);fill.position.set(14,9,-10);scene.add(hemi,sun,fill);
@@ -77,8 +79,11 @@
       if(selected&&focusLeaves){const l=focusLeaves.userData.model.leaves[G.leafIndex(selected)];halo.position.fromArray(l.position);halo.rotation.set(...l.rotation);halo.scale.setScalar(l.scale*1.1);}
       dirty=true;
     };
-    const view={theta:.42,phi:.24,radius:24,target:new T.Vector3()};let dirty=true;
-    reset=()=>{const mobile=root.clientWidth<700;view.theta=.32;view.phi=scope.level==='forest'?.58:.22;view.radius=scope.level==='forest'?(mobile?43:38):(mobile?29:24);view.target.set(0,4.7,0);dirty=true;};
+    const view={theta:.42,phi:.24,radius:24,target:new T.Vector3()};let dirty=true,tween=null,lastFrame=0,lastOut=-Infinity;
+    const snapshot=()=>({theta:view.theta,phi:view.phi,radius:view.radius,target:view.target.clone()});
+    const apply=v=>{view.theta=v.theta;view.phi=v.phi;view.radius=v.radius;view.target.copy(v.target);};
+    transition=animate=>{const from=snapshot();refocus();const to=snapshot();if(!animate||reduce){tween=null;return;}to.theta=from.theta+Math.atan2(Math.sin(to.theta-from.theta),Math.cos(to.theta-from.theta));apply(from);tween={from,to,start:lastFrame};dirty=true;};
+    reset=()=>{tween=null;const mobile=root.clientWidth<700;view.theta=.32;view.phi=scope.level==='forest'?.58:.22;view.radius=scope.level==='forest'?(mobile?43:38):(mobile?29:24);view.target.set(0,4.7,0);dirty=true;};
     refocus=()=>{
       if(scope.level==='forest'||scope.level==='tree'){reset();return;}
       const leaves=focusLeaves?.userData.model.leaves.filter(l=>l.bough===scope.bough&&(scope.level==='bough'||l.branch===scope.branch)&&(scope.level!=='leaf'||l.leaf===scope.leaf))||[];
@@ -87,7 +92,12 @@
       // Look inward from the chosen limb so the trunk cannot hide it.
       view.theta=Math.atan2(view.target.x,view.target.z);view.phi=.35;view.radius=scope.level==='leaf'?4.5:scope.level==='branch'?8.5:14;dirty=true;
     };
-    zoom=factor=>{view.radius=Math.max(scope.level==='forest'?18:3,Math.min(65,view.radius*factor));dirty=true;};
+    zoom=(factor,{gesture=false}={})=>{
+      if(!Number.isFinite(factor)||factor<=0)return;window.dispatchEvent(new Event('akshar-manual-view'));
+      const next=view.radius*factor,limit={leaf:7,branch:13,bough:21,tree:root.clientWidth<700?42:36}[scope.level];
+      if(factor>1&&limit&&next>limit){if(!gesture||Date.now()-lastOut>650){lastOut=Date.now();window.AksharExplorer?.zoomOut();}return;}
+      tween=null;view.radius=Math.max(scope.level==='forest'?18:3,Math.min(65,next));dirty=true;
+    };
     function updateCamera(){const v=view;camera.position.set(v.target.x+Math.sin(v.theta)*Math.cos(v.phi)*v.radius,v.target.y+Math.sin(v.phi)*v.radius,v.target.z+Math.cos(v.theta)*Math.cos(v.phi)*v.radius);camera.lookAt(v.target);camera.updateMatrixWorld();}
     setLight=()=>{fog.color.set(night?0x163b32:0xd4e0c6);hemi.intensity=night?.85:2.5;sun.intensity=night?.65:2.9;fill.intensity=night?1.1:1.4;groundMaterial.color.set(night?0x385c40:0x9cae83);root.style.background=night?'radial-gradient(ellipse at 72% 20%,#426a50,#183c32 55%,#122e27)':'';dirty=true;};
     const ray=new T.Raycaster(),mouse=new T.Vector2(),pointers=new Map();let gesture=null,moved=false,pinchDistance=0;
@@ -100,10 +110,10 @@
       }
     }
     const canvas=renderer.domElement;canvas.style.cursor='grab';
-    canvas.addEventListener('pointerdown',e=>{pointers.set(e.pointerId,[e.clientX,e.clientY]);canvas.setPointerCapture(e.pointerId);if(pointers.size===1){gesture={x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,theta:view.theta,phi:view.phi};moved=false;api.begin();}else{const [a,b]=[...pointers.values()];pinchDistance=Math.hypot(a[0]-b[0],a[1]-b[1]);moved=true;gesture=null;}});
+    canvas.addEventListener('pointerdown',e=>{window.dispatchEvent(new Event('akshar-manual-view'));tween=null;pointers.set(e.pointerId,[e.clientX,e.clientY]);canvas.setPointerCapture(e.pointerId);if(pointers.size===1){gesture={x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,theta:view.theta,phi:view.phi};moved=false;api.begin();}else{const [a,b]=[...pointers.values()];pinchDistance=Math.hypot(a[0]-b[0],a[1]-b[1]);moved=true;gesture=null;}});
     canvas.addEventListener('pointermove',e=>{
       if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,[e.clientX,e.clientY]);
-      if(pointers.size>=2){const [a,b]=[...pointers.values()],distance=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pinchDistance>0&&distance>0)zoom(pinchDistance/distance);pinchDistance=distance;moved=true;}
+      if(pointers.size>=2){const [a,b]=[...pointers.values()],distance=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pinchDistance>0&&distance>0)zoom(pinchDistance/distance,{gesture:true});pinchDistance=distance;moved=true;}
       else if(gesture){const dx=e.clientX-gesture.x,dy=e.clientY-gesture.y;if(Math.abs(dx)+Math.abs(dy)>5)moved=true;
         if(moved&&scope.level==='forest'&&interaction==='pan'){
           const sx=e.clientX-gesture.lastX,sy=e.clientY-gesture.lastY,scale=2*view.radius*Math.tan(Math.PI/8)/Math.max(1,root.clientHeight)/G.SIZE,forward=sy/Math.max(.25,Math.sin(view.phi));
@@ -115,12 +125,12 @@
     function release(e,cancel=false){const tapped=!cancel&&pointers.size===1&&!moved;pointers.delete(e.pointerId);gesture=null;pinchDistance=0;if(!pointers.size){api.finish();if(tapped)pick(e.clientX,e.clientY);}else moved=true;}
     canvas.addEventListener('pointerup',e=>release(e));canvas.addEventListener('pointercancel',e=>release(e,true));canvas.addEventListener('lostpointercapture',e=>{if(pointers.has(e.pointerId))release(e,true);});
     window.addEventListener('blur',()=>{pointers.clear();gesture=null;api.finish();});
-    canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(Math.max(-.5,Math.min(.5,e.deltaY*.0015))));},{passive:false});
+    canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(Math.max(-.5,Math.min(.5,e.deltaY*.0015))),{gesture:true});},{passive:false});
     canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();fallback(Error('WebGL context lost'));});
     function resize(){const w=Math.max(1,root.clientWidth),h=Math.max(1,root.clientHeight);renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();dirty=true;}
     if(window.ResizeObserver)new ResizeObserver(resize).observe(root);else window.addEventListener('resize',resize);
     const fireGeo=new T.BufferGeometry(),firePos=new Float32Array(90*3);for(let i=0;i<90;i++){firePos[i*3]=(rand()/4294967296-.5)*35;firePos[i*3+1]=1+rand()/4294967296*9;firePos[i*3+2]=(rand()/4294967296-.5)*35;}fireGeo.setAttribute('position',new T.BufferAttribute(firePos,3));const fire=new T.Points(fireGeo,new T.PointsMaterial({color:0xf7d784,size:.07,transparent:true,opacity:.6,depthWrite:false}));scene.add(fire);
-    let lastFrame=0;reset();rebuild();function frame(t){requestAnimationFrame(frame);if(document.hidden||document.querySelector('dialog[open]'))return;if(t-lastFrame<(low?1000/30:1000/60))return;lastFrame=t;if(!reduce){fire.position.y=Math.sin(t*.00035)*.2;if(halo.visible)halo.material.emissiveIntensity=.4+Math.sin(t*.002)*.15;dirty=true;}if(dirty){updateCamera();renderer.render(scene,camera);dirty=false;}}requestAnimationFrame(frame);
+    reset();rebuild();function frame(t){requestAnimationFrame(frame);if(document.hidden||document.querySelector('dialog[open]'))return;if(t-lastFrame<(low?1000/30:1000/60))return;lastFrame=t;if(tween){const k=Math.max(0,Math.min(1,(t-tween.start)/480)),e=k*k*(3-2*k),{from,to}=tween;view.theta=from.theta+(to.theta-from.theta)*e;view.phi=from.phi+(to.phi-from.phi)*e;view.radius=from.radius+(to.radius-from.radius)*e;view.target.copy(from.target).lerp(to.target,e);dirty=true;if(k===1)tween=null;}if(!reduce){fire.position.y=Math.sin(t*.00035)*.2;if(halo.visible)halo.material.emissiveIntensity=.4+Math.sin(t*.002)*.15;dirty=true;}if(dirty){updateCamera();renderer.render(scene,camera);dirty=false;}}requestAnimationFrame(frame);
     window.addEventListener('akshar-dialog-close',()=>{dirty=true;});
   }catch(error){fallback(error);}
 })();

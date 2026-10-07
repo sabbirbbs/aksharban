@@ -23,6 +23,7 @@ function hashPage(address,h){C.parseAddress(address);const p=new URLSearchParams
 function parse(value){
  let hash=String(value).trim();if(hash.startsWith('ab1.')){C.parseAddress(hash);return {kind:'page',address:hash,highlight:null};}
  if(hash.includes('#'))hash=hash.slice(hash.indexOf('#')+1);const p=new URLSearchParams(hash);
+ if(p.has('p')||p.has('r')&&!p.has('view'))return (root.ShareLinks||(typeof require==='function'?require('./sharing.js'):null)).parse(p);
  if(p.has('a')){const address=p.get('a');C.parseAddress(address);return {kind:'page',address,highlight:highlight({start:Number(p.get('s')),length:Number(p.get('n'))})};}
  if(p.has('view')){
   const s=validate({level:p.get('view'),tree:p.get('t')||'0',bough:p.get('b')||1,branch:p.get('r')||1,leaf:p.get('l')||1,...(p.has('x')||p.has('z')?{x:p.get('x'),z:p.get('z'),mx:p.get('mx')??0,mz:p.get('mz')??0}:{})});

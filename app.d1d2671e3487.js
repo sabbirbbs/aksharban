@@ -1,9 +1,9 @@
 (function(){
 'use strict';
-const C=window.BabelCore,N=window.GardenNavigation,$=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
+const C=window.BabelCore,N=window.GardenNavigation,L=window.ShareLinks,$=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 const bn=n=>String(n).replace(/[0-9]/g,d=>'০১২৩৪৫৬৭৮৯'[d]);
 const short=s=>s.length>22?s.slice(0,10)+'…'+s.slice(-7):s;
-const state={result:null,fontSize:innerWidth<700?20:22,bookmarks:[],highlight:null,busy:false,temporary:false,recents:[],words:false,searchVariant:0,exporting:false};
+const state={result:null,source:null,shareCache:null,fontSize:innerWidth<700?20:22,bookmarks:[],highlight:null,busy:false,temporary:false,recents:[],words:false,searchVariant:0,exporting:false};
 const permitted=new Set(['open','search']);let worker=null,workerURL=null,callID=0,jobID=0;const pending=new Map();
 function overlayHost(){return $$('dialog[open]').at(-1)||document.body;}
 function toast(message){overlayHost().append($('#toast'));$('#toast').textContent=message;$('#toast').classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').classList.remove('show'),3200);}
@@ -18,7 +18,7 @@ function core(op,args){if(!permitted.has(op))return Promise.reject(Error('Unsupp
 function busy(value){state.busy=value;if(value)overlayHost().append($('#loading'));$('#loading').hidden=!value;$('#searchSubmit').disabled=value;$('#addressSubmit').disabled=value;$('#addressSubmit').textContent=value?'পাতা খুলছে…':'পাতাটি খুলি ↗';$('#randomLeaf').disabled=value;$('#leafJumpSubmit').disabled=value;$('#leafJumpSubmit').textContent=value?'পাতা খুলছে…':'পাতাটি খুলি ↗';$('#reader').setAttribute('aria-busy',String(value));}
 function locationText(l){return `বৃক্ষ ${short(l.tree)} · ডাল ${bn(l.bough)} · শাখা ${bn(l.branch)} · পাতা ${bn(l.leaf)}`;}
 function hideDialogs(){for(const d of $$('dialog[open]'))d.close();}
-function showDialog(d){if(d.open)return;hideDialogs();d.showModal();}
+function showDialog(d){if(d.open)return;if(d.id!=='reader'){++jobID;window.AksharExplorer?.cancelJourney(true);if(state.busy)busy(false);}hideDialogs();d.showModal();}
 function closeReader(){hideDialogs();if(state.result)window.AksharExplorer?.show({...window.AksharExplorer.state(),...state.result.location,level:'leaf'});}
 for(const d of $$('dialog')){d.addEventListener('click',e=>{if(e.target!==d)return;const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom){if(d.id==='reader')closeReader();else d.close();}});d.addEventListener('close',()=>{document.body.classList.toggle('reader-open',!!$('#reader').open);overlayHost().append($('#toast'),$('#loading'));window.dispatchEvent(new Event('akshar-dialog-close'));});}
 $('#reader').addEventListener('cancel',e=>{e.preventDefault();closeReader();});
@@ -51,16 +51,18 @@ function renderPage(){
 }
 function hashFor(r,h){return N.hashPage(r.address,h);}
 function writeHash(hash,replace=false){if(location.hash===hash)return;try{history[replace?'replaceState':'pushState'](null,'',hash);}catch{/* Sandboxed file viewers may disallow history; copy still builds the full URL. */}}
-function addRecent(result,highlight){state.recents=state.recents.filter(b=>b.address!==result.address);state.recents.unshift({address:result.address,title:$('#readerTitle').textContent,highlight});state.recents=state.recents.slice(0,30);try{localStorage.setItem('aksharban-recents-v1',JSON.stringify(state.recents));}catch{}}
+function addRecent(result,highlight){state.recents=state.recents.filter(b=>b.address!==result.address);state.recents.unshift({address:result.address,title:$('#readerTitle').textContent,highlight,source:state.source});state.recents=state.recents.slice(0,30);try{localStorage.setItem('aksharban-recents-v1',JSON.stringify(state.recents));}catch{}}
 function focusReaderStart(){const reader=$('#reader');if(!reader.open)return;$('#readerTitle').focus({preventScroll:true});reader.scrollTop=0;$('#pageText').scrollTop=0;}
-function present(result,highlight=null,historyWrite=true){state.result=result;state.highlight=highlight;window.AksharExplorer?.fromPage(result.location);renderPage();addRecent(result,highlight);if(historyWrite)writeHash(hashFor(result,highlight));showDialog($('#reader'));document.body.classList.add('reader-open');$('#leafJumpStatus').textContent='';focusReaderStart();}
-async function run(op,args,{errorTarget='#searchError',highlight=null,historyWrite=true}={}){
- const ticket=++jobID;busy(true);$(errorTarget).hidden=true;
- try{const result=await core(op,args);if(ticket!==jobID)return false;let h=highlight;if(op==='search')h={start:result.offset,length:result.count};present(result,h,historyWrite);return true;}
+function present(result,highlight=null,historyWrite=true,source=null){state.result=result;state.highlight=highlight;state.source=source;state.shareCache=null;window.AksharExplorer?.fromPage(result.location);renderPage();prepareShare();addRecent(result,highlight);if(historyWrite)writeHash(hashFor(result,highlight));showDialog($('#reader'));document.body.classList.add('reader-open');$('#leafJumpStatus').textContent='';focusReaderStart();}
+async function run(op,args,{errorTarget='#searchError',highlight=null,historyWrite=true,source=null,animate=false,autoHighlight=true}={}){
+ window.AksharExplorer?.cancelJourney();const ticket=++jobID;busy(true);$(errorTarget).hidden=true;
+ try{const result=await core(op,args);if(ticket!==jobID)return false;let h=highlight;if(op==='search'&&autoHighlight){h={start:result.offset,length:result.count};source=L.searchSource(args[0],args[1],args[2],args[3]);}if(animate&&window.AksharExplorer){busy(false);const arrived=await window.AksharExplorer.arrive({...result.location,level:'leaf'});if(!arrived||ticket!==jobID)return false;}present(result,h,historyWrite,source);return true;}
  catch(error){if(ticket===jobID){$(errorTarget).textContent=error.message;$(errorTarget).hidden=false;toast(error.message);}return false;}
  finally{if(ticket===jobID)busy(false);}
 }
 function open(address,opts){return run('open',[address],opts);}
+function openRoute(route,opts={}){if(route.kind==='recipe')return run('search',route.args,{...opts,source:route.source,highlight:route.highlight,autoHighlight:route.autoHighlight});return open(route.address,{...opts,source:route.source,highlight:route.highlight});}
+
 function inputCount(){const text=$('#query').value.replace(/\r\n?/g,'\n').normalize('NFC');$('#inputMeta').textContent=bn(Array.from(text).length)+' / ৩,২০০ ইউনিকোড চিহ্ন';}
 // All three actions share direct activation; no native form submission is needed.
 function bindAction(formSelector,buttonSelector,inputSelector,action){
@@ -78,7 +80,7 @@ async function searchFromInput(){
 }
 $('#query').addEventListener('input',()=>{inputCount();$('#searchError').hidden=true;$('#query').removeAttribute('aria-invalid');});
 bindAction('#searchForm','#searchSubmit','#query',searchFromInput);
-$('#randomLeaf').addEventListener('click',()=>{try{open(C.randomAddress());}catch(e){toast(e.message);}});
+$('#randomLeaf').addEventListener('click',()=>{try{const source=L.randomSource();open(L.seedAddress(source.seed),{source});}catch(e){toast(e.message);}});
 function openAddressDialog(){
  if(state.busy){++jobID;busy(false);}
  $('#addressError').hidden=true;$('#addressInput').removeAttribute('aria-invalid');showDialog($('#addressDialog'));$('#addressInput').focus();
@@ -89,10 +91,10 @@ async function openFromInput(){
  try{
   const value=field.value.trim();if(!value)throw Error('পাতার সম্পূর্ণ কোড অথবা পূর্ণ লিংক দাও।');
   const route=N.parse(value);
-  if(route.kind==='page'){
-   const opened=await open(route.address,{errorTarget:'#addressError',highlight:route.highlight});
+  if(route.kind==='page'||route.kind==='recipe'){
+   const opened=await openRoute(route,{errorTarget:'#addressError',animate:true});
    if(!opened&&!error.hidden){field.setAttribute('aria-invalid','true');field.focus();}
-  }else{window.AksharExplorer.show(route.state);if(route.migrated)toast('পুরোনো বাগানের প্রথম পাতাটি নতুন বিন্যাসে খোলা হয়েছে।');}
+  }else{await window.AksharExplorer.openView(route.state,{animate:true});if(route.migrated)toast('পুরোনো বাগানের প্রথম পাতাটি নতুন বিন্যাসে খোলা হয়েছে।');}
  }catch(err){error.textContent=err.message;error.hidden=false;field.setAttribute('aria-invalid','true');field.focus();}
 }
 $('#addressButton').addEventListener('click',e=>{e.preventDefault();openAddressDialog();});
@@ -100,15 +102,26 @@ $('#addressInput').addEventListener('input',()=>{$('#addressError').hidden=true;
 bindAction('#addressForm','#addressSubmit','#addressInput',openFromInput);
 function loadBookmarks(){try{const data=JSON.parse(localStorage.getItem('aksharban-bookmarks-v1')||'[]');if(Array.isArray(data))state.bookmarks=data.filter(b=>{try{C.parseAddress(b.address);return true;}catch{return false;}}).slice(0,50);}catch{state.temporary=true;}$('#bookmarkCount').textContent=bn(state.bookmarks.length);}
 function persist(){try{localStorage.setItem('aksharban-bookmarks-v1',JSON.stringify(state.bookmarks));state.temporary=false;}catch{state.temporary=true;}$('#bookmarkCount').textContent=bn(state.bookmarks.length);}
-function bookmark(){const r=state.result;if(!r)return;if(!state.bookmarks.some(b=>b.address===r.address)){const title=$('#readerTitle').textContent;state.bookmarks.unshift({address:r.address,title,highlight:state.highlight});if(state.bookmarks.length>50)state.bookmarks.pop();persist();}renderPage();toast(state.temporary?'ব্রাউজারে স্থায়ীভাবে রাখা গেল না। সংগ্রহের ব্যাকআপ নামিয়ে রাখো।':'পাতাটি সংগ্রহে রাখা হয়েছে।');}
-function collection(){const list=$('#bookmarkList');list.replaceChildren();if(!state.bookmarks.length){const p=document.createElement('p');p.textContent='এখনও কোনো পাতা রাখা হয়নি। পাতার ভিতর থেকে ♡ চাপো।';list.append(p);}state.bookmarks.forEach((b,i)=>{const row=document.createElement('div');row.className='bookmark-row';const btn=document.createElement('button');btn.textContent=b.title||'অচেনা পাতা';btn.type='button';const small=document.createElement('small');small.textContent=locationText(C.location(C.parseAddress(b.address)));btn.append(small);btn.addEventListener('click',()=>open(b.address,{highlight:validHighlight(b.highlight)}));const del=document.createElement('button');del.type='button';del.textContent='সরাই';del.setAttribute('aria-label','সংগ্রহ থেকে '+(b.title||'পাতা')+' সরাই');del.addEventListener('click',()=>{const removed=state.bookmarks.splice(i,1)[0];persist();collection();toast('সরানো হয়েছে।');const undo=document.createElement('button');undo.textContent='ফিরিয়ে আনি';undo.addEventListener('click',()=>{if(!state.bookmarks.some(x=>x.address===removed.address)){state.bookmarks.splice(i,0,removed);persist();collection();}$('#toast').classList.remove('show');});$('#toast').append(' ',undo);});row.append(btn,del);list.append(row);});}
+function bookmark(){const r=state.result;if(!r)return;if(!state.bookmarks.some(b=>b.address===r.address)){const title=$('#readerTitle').textContent;state.bookmarks.unshift({address:r.address,title,highlight:state.highlight,source:state.source});if(state.bookmarks.length>50)state.bookmarks.pop();persist();}renderPage();toast(state.temporary?'ব্রাউজারে স্থায়ীভাবে রাখা গেল না। সংগ্রহের ব্যাকআপ নামিয়ে রাখো।':'পাতাটি সংগ্রহে রাখা হয়েছে।');}
+function collection(){const list=$('#bookmarkList');list.replaceChildren();if(!state.bookmarks.length){const p=document.createElement('p');p.textContent='এখনও কোনো পাতা রাখা হয়নি। পাতার ভিতর থেকে ♡ চাপো।';list.append(p);}state.bookmarks.forEach((b,i)=>{const row=document.createElement('div');row.className='bookmark-row';const btn=document.createElement('button');btn.textContent=b.title||'অচেনা পাতা';btn.type='button';const small=document.createElement('small');small.textContent=locationText(C.location(C.parseAddress(b.address)));btn.append(small);btn.addEventListener('click',()=>open(b.address,{highlight:validHighlight(b.highlight),source:b.source}));const del=document.createElement('button');del.type='button';del.textContent='সরাই';del.setAttribute('aria-label','সংগ্রহ থেকে '+(b.title||'পাতা')+' সরাই');del.addEventListener('click',()=>{const removed=state.bookmarks.splice(i,1)[0];persist();collection();toast('সরানো হয়েছে।');const undo=document.createElement('button');undo.textContent='ফিরিয়ে আনি';undo.addEventListener('click',()=>{if(!state.bookmarks.some(x=>x.address===removed.address)){state.bookmarks.splice(i,0,removed);persist();collection();}$('#toast').classList.remove('show');});$('#toast').append(' ',undo);});row.append(btn,del);list.append(row);});}
 $('#bookmarksTop').addEventListener('click',()=>{collection();showDialog($('#bookmarksDialog'));});$('#saveLeaf').addEventListener('click',bookmark);
 function downloadBytes(data,type,name){const url=URL.createObjectURL(new Blob([data],{type})),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);}
 $('#exportCollection').addEventListener('click',()=>downloadBytes(JSON.stringify({version:'ab1',bookmarks:state.bookmarks},null,2),'application/json','aksharban-collection.json'));
-$('#importCollection').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>1500000)throw Error('ফাইলটি অতিরিক্ত বড়।');const data=JSON.parse(await file.text());if(data.version!=='ab1'||!Array.isArray(data.bookmarks))throw Error('এটি অক্ষরবনের সংগ্রহ ফাইল নয়।');const valid=data.bookmarks.slice(0,50).map(b=>{C.parseAddress(b.address);return {address:b.address,title:String(b.title||'অচেনা পাতা').slice(0,160),highlight:validHighlight(b.highlight)};});for(const b of valid)if(!state.bookmarks.some(x=>x.address===b.address))state.bookmarks.push(b);state.bookmarks=state.bookmarks.slice(0,50);persist();collection();toast(state.temporary?'এই সেশনে সংগ্রহ যোগ হয়েছে।':'সংগ্রহ যোগ হয়েছে।');}catch(error){toast(error.message);}e.target.value='';});
+$('#importCollection').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>1500000)throw Error('ফাইলটি অতিরিক্ত বড়।');const data=JSON.parse(await file.text());if(data.version!=='ab1'||!Array.isArray(data.bookmarks))throw Error('এটি অক্ষরবনের সংগ্রহ ফাইল নয়।');const valid=data.bookmarks.slice(0,50).map(b=>{C.parseAddress(b.address);return {address:b.address,title:String(b.title||'অচেনা পাতা').slice(0,160),highlight:validHighlight(b.highlight),source:b.source};});for(const b of valid)if(!state.bookmarks.some(x=>x.address===b.address))state.bookmarks.push(b);state.bookmarks=state.bookmarks.slice(0,50);persist();collection();toast(state.temporary?'এই সেশনে সংগ্রহ যোগ হয়েছে।':'সংগ্রহ যোগ হয়েছে।');}catch(error){toast(error.message);}e.target.value='';});
 async function copy(value,message){try{if(!navigator.clipboard?.writeText)throw Error('clipboard');await navigator.clipboard.writeText(value);toast(message);}catch{const field=$('#copyValue');field.value=value;if(!$('#copyDialog').open)$('#copyDialog').showModal();field.focus();field.select();}}
 $('#copyAddress').addEventListener('click',()=>state.result&&copy(state.result.address,'সম্পূর্ণ ঠিকানা কপি হয়েছে।'));
 $('#shareLeaf').addEventListener('click',()=>{if(state.result)copy(N.fullLink(location.href,hashFor(state.result,state.highlight)),'পূর্ণ লিংক কপি হয়েছে।');});
+function prepareShare(){
+ if(!state.result)return null;if(state.shareCache)return state.shareCache;
+ const choice=L.best(state.result,state.highlight,state.source),url=N.fullLink(location.href,choice.hash);state.shareCache={...choice,url};
+ $('#copyShareLink').textContent=url.length<=500?'ছোট লিংক কপি ↗':'শেয়ার লিংক কপি ↗';
+ $('#shareSummary').textContent='লিংকটি '+bn(url.length)+'টি চিহ্নের। '+(url.length<=500?'যে খুলবে, একই পাতায় পৌঁছাবে।':'এই পাতাটি অক্ষরে অক্ষরে ফেরাতে দীর্ঘ লিংক প্রয়োজন।');
+ return state.shareCache;
+}
+$('#copyShareLink').addEventListener('click',()=>{const link=prepareShare();if(link)copy(link.url,'শেয়ার লিংক কপি হয়েছে।');});
+$('#nativeShare').addEventListener('click',async()=>{const link=prepareShare();if(!link)return;const data={title:'অক্ষরবন · একটি পাতায় দেখা হবে',text:'গাছ, ডাল আর শাখা পেরিয়ে এই পাতাটিতে এসো।',url:link.url};try{if(!navigator.share)throw Error('unavailable');await navigator.share(data);}catch(e){if(e.name!=='AbortError')copy(link.url,'শেয়ার লিংক কপি হয়েছে।');}});
+$('#replayJourney').addEventListener('click',async()=>{if(!state.result)return;const result=state.result,h=state.highlight,source=state.source,ticket=++jobID;hideDialogs();if(await window.AksharExplorer.arrive({...window.AksharExplorer.state(),...result.location,level:'leaf'})&&ticket===jobID)present(result,h,false,source);});
+$('#readerZoomOut').addEventListener('click',()=>{if(state.result)window.AksharExplorer.backToBranch(state.result.location);});
 $('#downloadText').addEventListener('click',()=>{if(state.result)downloadBytes(state.result.raw,'text/plain;charset=utf-8','aksharban-'+C.hash(state.result.address).toString(36)+'.txt');});
 $('#downloadLocation').addEventListener('click',()=>{if(state.result)downloadBytes(JSON.stringify({version:'ab1',address:state.result.address,highlight:state.highlight},null,2),'application/json','aksharban-leaf-address.json');});
 function neighbor(delta){if(!state.result||state.busy)return;const n=C.parseAddress(state.result.address)+BigInt(delta);const range=branchRange();if(n<range.start||n>=range.start+BigInt(range.count))return;open(C.formatAddress(n));}
@@ -142,7 +155,7 @@ $('#randomInBranch').addEventListener('click',()=>{const r=branchRange(),bytes=n
 $('#backToBranch').addEventListener('click',()=>{if(state.result)window.AksharExplorer.backToBranch(state.result.location);});
 $('#wordToggle').addEventListener('click',e=>{state.words=!state.words;e.currentTarget.setAttribute('aria-pressed',String(state.words));e.currentTarget.textContent=state.words?'শব্দখোঁজ বন্ধ':'শব্দখোঁজ চালু';renderPage();});
 $('#anotherMatch').addEventListener('click',()=>{if(!state.highlight||state.busy)return;const q=Array.from(state.result.raw).slice(state.highlight.start,state.highlight.start+state.highlight.length).join('');run('search',[q,'raw',$('#surround').value==='blank'?'chaos':$('#surround').value,++state.searchVariant]);});
-$('#recentTop').addEventListener('click',()=>{const list=$('#recentList');list.replaceChildren();if(!state.recents.length){const p=document.createElement('p');p.textContent='এখনও কোনো পাতা পড়া হয়নি।';list.append(p);}for(const b of state.recents){const row=document.createElement('div');row.className='bookmark-row';const btn=document.createElement('button');btn.textContent=b.title||'অচেনা পাতা';const small=document.createElement('small');small.textContent=locationText(C.location(C.parseAddress(b.address)));btn.append(small);btn.addEventListener('click',()=>open(b.address,{highlight:validHighlight(b.highlight)}));row.append(btn);list.append(row);}showDialog($('#recentDialog'));});
+$('#recentTop').addEventListener('click',()=>{const list=$('#recentList');list.replaceChildren();if(!state.recents.length){const p=document.createElement('p');p.textContent='এখনও কোনো পাতা পড়া হয়নি।';list.append(p);}for(const b of state.recents){const row=document.createElement('div');row.className='bookmark-row';const btn=document.createElement('button');btn.textContent=b.title||'অচেনা পাতা';const small=document.createElement('small');small.textContent=locationText(C.location(C.parseAddress(b.address)));btn.append(small);btn.addEventListener('click',()=>open(b.address,{highlight:validHighlight(b.highlight),source:b.source}));row.append(btn);list.append(row);}showDialog($('#recentDialog'));});
 let exportCancelled=false;
 $('#cancelDownload').addEventListener('click',()=>{exportCancelled=true;});
 $('#downloadBranch').addEventListener('click',async()=>{
@@ -158,6 +171,6 @@ $('#downloadBranch').addEventListener('click',async()=>{
  }catch(e){toast(e.message);}finally{state.exporting=false;$('#downloadBranch').disabled=false;$('#branchProgress').hidden=true;}
 });
 try{const saved=JSON.parse(localStorage.getItem('aksharban-recents-v1')||'[]');if(Array.isArray(saved))state.recents=saved.filter(b=>{try{C.parseAddress(b.address);return true;}catch{return false;}}).slice(0,30);}catch{}
-window.AksharApp={open,copy,toast,bn,short,hideDialogs,writeHash,bindAction,cancelPending(){++jobID;busy(false);}};
+window.AksharApp={open,openRoute,copy,toast,bn,short,hideDialogs,writeHash,bindAction,cancelPending(){++jobID;window.AksharExplorer?.cancelJourney();busy(false);}};
 loadBookmarks();
 })();

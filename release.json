@@ -1,16 +1,17 @@
 {
-  "version": "2.1.0",
+  "version": "2.2.0",
   "layout": 2,
   "contentAddress": "ab1",
-  "release": "093ee3cc194ae707",
+  "release": "299bc47e20610e08",
   "assets": {
     "core.js": "core.40eb3e92e0ee.js",
     "worker.js": "worker.68967a67fc71.js",
-    "app.js": "app.5366849b28bd.js",
-    "navigation.js": "navigation.7f3ab7c817bc.js",
+    "app.js": "app.d1d2671e3487.js",
+    "navigation.js": "navigation.5e08eb819f68.js",
+    "sharing.js": "sharing.c45de2481d3c.js",
     "garden-model.js": "garden-model.d2165999a53e.js",
-    "garden.js": "garden.fefdf9b51af1.js",
-    "explorer.js": "explorer.0baca2340382.js",
-    "styles.css": "styles.ca42c6fb4a8d.css"
+    "garden.js": "garden.5872183427a3.js",
+    "explorer.js": "explorer.f366489a9b0f.js",
+    "styles.css": "styles.f0e687ec2cfa.css"
   }
 }
