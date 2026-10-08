@@ -1,8 +1,8 @@
 {
-  "version": "2.3.0",
+  "version": "2.4.0",
   "layout": 2,
   "contentAddress": "ab1",
-  "release": "c0ac2acc30626a57",
+  "release": "c0ac2acc30626a58",
   "assets": {
     "core.js": "core.40eb3e92e0ee.js",
     "arithmetic.js": "arithmetic.3331025e2189.js",

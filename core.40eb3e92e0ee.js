@@ -36,7 +36,7 @@
     const parts=/^ab1\.(0|[1-9a-z][0-9a-z]*)\.([0-9a-z]+)$/.exec(s);
     if(!parts||hash(parts[1]).toString(36)!==parts[2])throw Error('ঠিকানাটি সঠিক নয়, অথবা কপি করার সময় কেটে গেছে।');
     let x=0n;for(const d of parts[1])x=x*36n+BigInt(parseInt(d,36));
-    if(x>=engine.M)throw Error('এই ঠিকানা Bangla Core v1-এর বাইরে।');return x;
+    if(x>=engine.M)throw Error('এই ঠিকানা বাগানের সীমানার বাইরে।');return x;
   }
   function validate(text,mode='nfc'){
     const normalized=mode==='nfc'?text.replace(/\r\n?/g,'\n').normalize('NFC'):text;
@@ -44,7 +44,7 @@
     if(chars.length===0)throw Error('খোঁজার জন্য কিছু বাংলা লেখা দাও।');
     if(chars.length>3200)throw Error('এক পাতায় সর্বোচ্চ ৩,২০০ code point রাখা যায়।');
     const bad=[...new Set(chars.filter(c=>!allowed.has(c)))];
-    if(bad.length)throw Error('Bangla Core-এ নেই: '+bad.slice(0,5).map(c=>c+' (U+'+c.codePointAt(0).toString(16).toUpperCase()+')').join(', ')+'। বাংলা অক্ষর ও বাংলা সংখ্যা ব্যবহার করো।');
+    if(bad.length)throw Error('এই বাগানে নেই: '+bad.slice(0,5).map(c=>c+' (U+'+c.codePointAt(0).toString(16).toUpperCase()+')').join(', ')+'। বাংলা অক্ষর ও প্রচলিত চিহ্ন ব্যবহার করো।');
     return {text:normalized,changed:normalized!==text,count:chars.length};
   }
   // A small authored word list: reading aid, not a dictionary or language validator.
