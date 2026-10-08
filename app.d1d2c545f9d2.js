@@ -4,17 +4,18 @@ const C=window.BabelCore,N=window.GardenNavigation,L=window.ShareLinks,$=s=>docu
 const bn=n=>String(n).replace(/[0-9]/g,d=>'০১২৩৪৫৬৭৮৯'[d]);
 const short=s=>s.length>22?s.slice(0,10)+'…'+s.slice(-7):s;
 const state={result:null,source:null,shareCache:null,fontSize:innerWidth<700?20:22,bookmarks:[],highlight:null,busy:false,temporary:false,recents:[],words:false,searchVariant:0,exporting:false};
-const permitted=new Set(['open','search']);let worker=null,workerURL=null,callID=0,jobID=0;const pending=new Map();
+const permitted=new Set(['open','search','share']);let worker=null,workerURL=null,callID=0,jobID=0;const pending=new Map();
 function overlayHost(){return $$('dialog[open]').at(-1)||document.body;}
 function toast(message){overlayHost().append($('#toast'));$('#toast').textContent=message;$('#toast').classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').classList.remove('show'),3200);}
-function workerFallback(){if(worker)worker.terminate();worker=null;if(workerURL){URL.revokeObjectURL(workerURL);workerURL=null;}for(const [id,p] of pending){clearTimeout(p.timer);pending.delete(id);setTimeout(()=>{try{p.resolve(C[p.op](...p.args));}catch(e){p.reject(e);}},0);}}
+function dispatch(op,args){return op==='share'?L.bestAsync(...args):C[op](...args);}
+function workerFallback(){if(worker)worker.terminate();worker=null;if(workerURL){URL.revokeObjectURL(workerURL);workerURL=null;}for(const [id,p] of pending){clearTimeout(p.timer);pending.delete(id);setTimeout(()=>{try{p.resolve(dispatch(p.op,p.args));}catch(e){p.reject(e);}},0);}}
 try{
  const source=$('#core-source').textContent;
- if(source.trim()){workerURL=URL.createObjectURL(new Blob([source,'\nonmessage=({data})=>{try{if(!["search","open"].includes(data.op))throw Error("Unsupported operation");postMessage({id:data.id,result:BabelCore[data.op](...data.args)});}catch(e){postMessage({id:data.id,error:e.message});}};'],{type:'text/javascript'}));worker=new Worker(workerURL);}
- else if(location.protocol!=='file:')worker=new Worker('worker.68967a67fc71.js');
+ if(source.trim()){workerURL=URL.createObjectURL(new Blob([source,'\n',$('#arithmetic-source').textContent,'\n',$('#sharing-source').textContent,'\nonmessage=({data})=>{try{if(!["search","open","share"].includes(data.op))throw Error("Unsupported operation");postMessage({id:data.id,result:data.op==="share"?ShareLinks.best(...data.args):BabelCore[data.op](...data.args)});}catch(e){postMessage({id:data.id,error:e.message});}};'],{type:'text/javascript'}));worker=new Worker(workerURL);}
+ else if(location.protocol!=='file:')worker=new Worker('worker.5d2162933e20.js');
  if(worker){worker.onmessage=e=>{const p=pending.get(e.data.id);if(!p)return;clearTimeout(p.timer);pending.delete(e.data.id);e.data.error?p.reject(Error(e.data.error)):p.resolve(e.data.result);};worker.onerror=e=>{e.preventDefault();workerFallback();};}
 }catch{workerFallback();}
-function core(op,args){if(!permitted.has(op))return Promise.reject(Error('Unsupported operation'));return new Promise((resolve,reject)=>{if(!worker){setTimeout(()=>{try{resolve(C[op](...args));}catch(e){reject(e);}},0);return;}const id=++callID,timer=setTimeout(workerFallback,6000);pending.set(id,{op,args,resolve,reject,timer});try{worker.postMessage({id,op,args});}catch{workerFallback();}});}
+function core(op,args){if(!permitted.has(op))return Promise.reject(Error('Unsupported operation'));return new Promise((resolve,reject)=>{if(!worker){setTimeout(()=>{try{resolve(dispatch(op,args));}catch(e){reject(e);}},0);return;}const id=++callID,timer=setTimeout(workerFallback,6000);pending.set(id,{op,args,resolve,reject,timer});try{worker.postMessage({id,op,args});}catch{workerFallback();}});}
 function busy(value){state.busy=value;if(value)overlayHost().append($('#loading'));$('#loading').hidden=!value;$('#searchSubmit').disabled=value;$('#addressSubmit').disabled=value;$('#addressSubmit').textContent=value?'পাতা খুলছে…':'পাতাটি খুলি ↗';$('#randomLeaf').disabled=value;$('#leafJumpSubmit').disabled=value;$('#leafJumpSubmit').textContent=value?'পাতা খুলছে…':'পাতাটি খুলি ↗';$('#reader').setAttribute('aria-busy',String(value));}
 function locationText(l){return `বৃক্ষ ${short(l.tree)} · ডাল ${bn(l.bough)} · শাখা ${bn(l.branch)} · পাতা ${bn(l.leaf)}`;}
 function hideDialogs(){for(const d of $$('dialog[open]'))d.close();}
@@ -53,10 +54,10 @@ function hashFor(r,h){return N.hashPage(r.address,h);}
 function writeHash(hash,replace=false){if(location.hash===hash)return;try{history[replace?'replaceState':'pushState'](null,'',hash);}catch{/* Sandboxed file viewers may disallow history; copy still builds the full URL. */}}
 function addRecent(result,highlight){state.recents=state.recents.filter(b=>b.address!==result.address);state.recents.unshift({address:result.address,title:$('#readerTitle').textContent,highlight,source:state.source});state.recents=state.recents.slice(0,30);try{localStorage.setItem('aksharban-recents-v1',JSON.stringify(state.recents));}catch{}}
 function focusReaderStart(){const reader=$('#reader');if(!reader.open)return;$('#readerTitle').focus({preventScroll:true});reader.scrollTop=0;$('#pageText').scrollTop=0;}
-function present(result,highlight=null,historyWrite=true,source=null){state.result=result;state.highlight=highlight;state.source=source;state.shareCache=null;window.AksharExplorer?.fromPage(result.location);renderPage();prepareShare();addRecent(result,highlight);if(historyWrite)writeHash(hashFor(result,highlight));showDialog($('#reader'));document.body.classList.add('reader-open');$('#leafJumpStatus').textContent='';focusReaderStart();}
+function present(result,highlight=null,historyWrite=true,source=null,shareChoice=null){state.result=result;state.highlight=highlight;state.source=source;state.shareCache=null;window.AksharExplorer?.fromPage(result.location);renderPage();prepareShare(shareChoice);addRecent(result,highlight);if(historyWrite)writeHash(hashFor(result,highlight));showDialog($('#reader'));document.body.classList.add('reader-open');$('#leafJumpStatus').textContent='';focusReaderStart();}
 async function run(op,args,{errorTarget='#searchError',highlight=null,historyWrite=true,source=null,animate=false,autoHighlight=true}={}){
  window.AksharExplorer?.cancelJourney();const ticket=++jobID;busy(true);$(errorTarget).hidden=true;
- try{const result=await core(op,args);if(ticket!==jobID)return false;let h=highlight;if(op==='search'&&autoHighlight){h={start:result.offset,length:result.count};source=L.searchSource(args[0],args[1],args[2],args[3]);}if(animate&&window.AksharExplorer){busy(false);const arrived=await window.AksharExplorer.arrive({...result.location,level:'leaf'});if(!arrived||ticket!==jobID)return false;}present(result,h,historyWrite,source);return true;}
+ try{const result=await core(op,args);if(ticket!==jobID)return false;let h=highlight;if(op==='search'&&autoHighlight){h={start:result.offset,length:result.count};source=L.searchSource(args[0],args[1],args[2],args[3]);}const shareChoice=await core('share',[result,h,source]);if(ticket!==jobID)return false;if(animate&&window.AksharExplorer){busy(false);const arrived=await window.AksharExplorer.arrive({...result.location,level:'leaf'});if(!arrived||ticket!==jobID)return false;}present(result,h,historyWrite,source,shareChoice);return true;}
  catch(error){if(ticket===jobID){$(errorTarget).textContent=error.message;$(errorTarget).hidden=false;toast(error.message);}return false;}
  finally{if(ticket===jobID)busy(false);}
 }
@@ -111,16 +112,16 @@ $('#importCollection').addEventListener('change',async e=>{const file=e.target.f
 async function copy(value,message){try{if(!navigator.clipboard?.writeText)throw Error('clipboard');await navigator.clipboard.writeText(value);toast(message);}catch{const field=$('#copyValue');field.value=value;if(!$('#copyDialog').open)$('#copyDialog').showModal();field.focus();field.select();}}
 $('#copyAddress').addEventListener('click',()=>state.result&&copy(state.result.address,'সম্পূর্ণ ঠিকানা কপি হয়েছে।'));
 $('#shareLeaf').addEventListener('click',()=>{if(state.result)copy(N.fullLink(location.href,hashFor(state.result,state.highlight)),'পূর্ণ লিংক কপি হয়েছে।');});
-function prepareShare(){
+function prepareShare(prepared=null){
  if(!state.result)return null;if(state.shareCache)return state.shareCache;
- const choice=L.best(state.result,state.highlight,state.source),url=N.fullLink(location.href,choice.hash);state.shareCache={...choice,url};
+ const choice=prepared||L.baseline(state.result,state.highlight,state.source),url=N.fullLink(location.href,choice.hash);state.shareCache={...choice,url};
  $('#copyShareLink').textContent=url.length<=500?'ছোট লিংক কপি ↗':'শেয়ার লিংক কপি ↗';
- $('#shareSummary').textContent='লিংকটি '+bn(url.length)+'টি চিহ্নের। '+(url.length<=500?'যে খুলবে, একই পাতায় পৌঁছাবে।':'এই পাতাটি অক্ষরে অক্ষরে ফেরাতে দীর্ঘ লিংক প্রয়োজন।');
+ $('#shareSummary').textContent=(choice.kind==='arithmetic'?'সমীকরণ দিয়ে ছোট করা হয়েছে। ':'')+'লিংকটি '+bn(url.length)+'টি চিহ্নের। '+(url.length<=500?'যে খুলবে, একই পাতায় পৌঁছাবে।':'এই পাতার জন্য পাওয়া সবচেয়ে ছোট লিংকটিও দীর্ঘ।');
  return state.shareCache;
 }
 $('#copyShareLink').addEventListener('click',()=>{const link=prepareShare();if(link)copy(link.url,'শেয়ার লিংক কপি হয়েছে।');});
 $('#nativeShare').addEventListener('click',async()=>{const link=prepareShare();if(!link)return;const data={title:'অক্ষরবন · একটি পাতায় দেখা হবে',text:'গাছ, ডাল আর শাখা পেরিয়ে এই পাতাটিতে এসো।',url:link.url};try{if(!navigator.share)throw Error('unavailable');await navigator.share(data);}catch(e){if(e.name!=='AbortError')copy(link.url,'শেয়ার লিংক কপি হয়েছে।');}});
-$('#replayJourney').addEventListener('click',async()=>{if(!state.result)return;const result=state.result,h=state.highlight,source=state.source,ticket=++jobID;hideDialogs();if(await window.AksharExplorer.arrive({...window.AksharExplorer.state(),...result.location,level:'leaf'})&&ticket===jobID)present(result,h,false,source);});
+$('#replayJourney').addEventListener('click',async()=>{if(!state.result)return;const result=state.result,h=state.highlight,source=state.source,shareChoice=state.shareCache,ticket=++jobID;hideDialogs();if(await window.AksharExplorer.arrive({...window.AksharExplorer.state(),...result.location,level:'leaf'})&&ticket===jobID)present(result,h,false,source,shareChoice);});
 $('#readerZoomOut').addEventListener('click',()=>{if(state.result)window.AksharExplorer.backToBranch(state.result.location);});
 $('#downloadText').addEventListener('click',()=>{if(state.result)downloadBytes(state.result.raw,'text/plain;charset=utf-8','aksharban-'+C.hash(state.result.address).toString(36)+'.txt');});
 $('#downloadLocation').addEventListener('click',()=>{if(state.result)downloadBytes(JSON.stringify({version:'ab1',address:state.result.address,highlight:state.highlight},null,2),'application/json','aksharban-leaf-address.json');});

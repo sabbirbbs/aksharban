@@ -2,6 +2,7 @@
 (function(root){
 'use strict';
 const C=root.BabelCore||(typeof require==='function'?require('./core.js'):null),B64='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_',symbols=new Map(C.ALPHABET.map((c,i)=>[c,i]));
+const A=root.ArithmeticLinks||(typeof require==='function'?require('./arithmetic.js'):null);
 function encode(bytes){let out='',bits=0,value=0;for(const b of bytes){value=(value<<8)|b;bits+=8;while(bits>=6){bits-=6;out+=B64[(value>>>bits)&63];}}if(bits)out+=B64[(value<<(6-bits))&63];return out;}
 function decode(s){if(!s||s.length>15000||!/^[A-Za-z0-9_-]+$/.test(s)||s.length%4===1)throw Error('শেয়ার লিংকটি অসম্পূর্ণ।');let bits=0,value=0,out=[];for(const ch of s){value=(value<<6)|B64.indexOf(ch);bits+=6;if(bits>=8){bits-=8;out.push((value>>>bits)&255);}}if(encode(out)!==s)throw Error('শেয়ার লিংকটি সঠিক নয়।');return out;}
 function checked(body){return body+'.'+C.hash('share/v1/'+body).toString(36);}
@@ -17,21 +18,33 @@ function seedAddress(seed){if(!/^[0-9a-f]{32}$/.test(seed))throw Error('পা�
 function randomSource(){const bytes=new Uint8Array(16);if(!root.crypto?.getRandomValues)throw Error('এই ব্রাউজারে random generator পাওয়া যায়নি।');root.crypto.getRandomValues(bytes);return {kind:'seed',seed:Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')};}
 function seedToken(s){seedAddress(s.seed);return '#r='+checked('g1.'+encode(s.seed.match(/../g).map(b=>parseInt(b,16))));}
 function literal(raw,h){const bytes=textBytes(raw);if(bytes.length!==3200)throw Error('পাতাটি অসম্পূর্ণ।');const packed=[];for(let i=0;i<bytes.length;){let end=i+1;while(end<bytes.length&&bytes[end]===bytes[i])end++;const count=end-i;if(count>=4)packed.push(150,count>>8,count&255,bytes[i]);else for(let j=i;j<end;j++)packed.push(bytes[i]);i=end;}return decorate('#r='+checked('t1.'+encode(packed)),h);}
+function equationToken(value,h){return decorate('#r='+checked('a1.'+value.target+'.'+encode(value.bytes)),h);}
 function parse(params){
  const h=hi({start:Number(params.get('s')),length:Number(params.get('n'))});
  if(params.has('p')){const p=unpack(params.get('p'));if(p.length!==2||p[0]!=='1')throw Error('এই শেয়ার লিংকের সংস্করণ সমর্থিত নয়।');const bytes=decode(p[1]);if(bytes.length>3000||(bytes.length>1&&bytes[0]===0))throw Error('পাতার ঠিকানা সঠিক নয়।');const n=BigInt('0x'+bytes.map(b=>b.toString(16).padStart(2,'0')).join(''));return {kind:'page',address:C.formatAddress(n),highlight:h};}
  const p=unpack(params.get('r'));
+ if(p[0]==='a1'&&p.length===3&&['t','a'].includes(p[1])){const n=A.decode(decode(p[2]));if(p[1]==='a')return {kind:'page',address:C.formatAddress(n),highlight:h};return {kind:'recipe',args:[C.engine.unrank(n),'raw','blank',0],highlight:h,autoHighlight:false};}
  if(p[0]==='g1'&&p.length===2){const bytes=decode(p[1]);if(bytes.length!==16)throw Error('পাতার বীজ অসম্পূর্ণ।');const source={kind:'seed',seed:bytes.map(b=>b.toString(16).padStart(2,'0')).join('')};return {kind:'page',address:seedAddress(source.seed),highlight:h,source};}
  if(p[0]==='s1'&&p.length===4){if(!/^[nr][bcw]$/.test(p[1])||!/^(0|[1-9a-z][0-9a-z]{0,10})$/.test(p[2]))throw Error('খোঁজার শেয়ার সূত্র সঠিক নয়।');const source=searchSource(bytesText(decode(p[3])),p[1][0]==='r'?'raw':'nfc',({b:'blank',c:'chaos',w:'words'}[p[1][1]]),parseInt(p[2],36));return {kind:'recipe',args:[source.text,source.mode,source.surround,source.variant],source,autoHighlight:true};}
  if(p[0]==='t1'&&p.length===2){const bytes=decode(p[1]),out=[];for(let i=0;i<bytes.length;){const symbol=bytes[i++];if(symbol===150){if(i+2>=bytes.length)throw Error('পাতার লেখা অসম্পূর্ণ।');const count=(bytes[i++]<<8)|bytes[i++],value=bytes[i++];if(count<4||value>=150||out.length+count>3200)throw Error('পাতার লেখা সঠিক নয়।');for(let j=0;j<count;j++)out.push(value);}else{if(symbol>=150||out.length>=3200)throw Error('পাতার লেখা সঠিক নয়।');out.push(symbol);}}if(out.length!==3200)throw Error('পাতার লেখা অসম্পূর্ণ।');return {kind:'recipe',args:[bytesText(out),'raw','blank',0],highlight:h,autoHighlight:false};}
  throw Error('এই শেয়ার লিংকের সংস্করণ সমর্থিত নয়।');
 }
-function best(result,h,source){
+function baseline(result,h,source){
  const candidates=[{hash:decorate('#a='+result.address,h),kind:'address'},{hash:compact(result.address,h),kind:'compact'},{hash:literal(result.raw,h),kind:'literal'}];
  // Imported metadata is untrusted: only use a recipe that recreates THIS exact address and highlight.
  try{if(source?.kind==='seed'&&seedAddress(source.seed)===result.address)candidates.push({hash:decorate(seedToken(source),h),kind:'seed'});
  if(source?.kind==='search'){const s=searchSource(source.text,source.mode,source.surround,source.variant),r=C.search(s.text,s.mode,s.surround,s.variant);if(r.address===result.address&&h&&h.start===r.offset&&h.length===r.count)candidates.push({hash:searchToken(s),kind:'search'});}}catch{/* Fall back to the exact content/address. */}
  return candidates.sort((a,b)=>a.hash.length-b.hash.length)[0];
 }
-const api={best,parse,compact,literal,searchSource,searchToken,randomSource,seedAddress,seedToken};root.ShareLinks=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+function chooseEquation(result,h,choice,value){
+ const hash=equationToken(value,h);if(hash.length>=choice.hash.length)return choice;
+ const n=A.decode(value.bytes),address=value.target==='a'?C.formatAddress(n):C.formatAddress(C.engine.permute(n,true));
+ // Verify the independent decoder and the original canonical address, not just
+ // the optimizer's internal expression value. Never trade correctness for size.
+ if(address!==result.address)return choice;
+ return {hash,kind:'arithmetic',saved:choice.hash.length-hash.length};
+}
+function best(result,h,source){const choice=baseline(result,h,source);try{return chooseEquation(result,h,choice,A.optimize(result.raw,result.address));}catch{return choice;}}
+async function bestAsync(result,h,source){const choice=baseline(result,h,source);try{return chooseEquation(result,h,choice,await A.optimizeAsync(result.raw,result.address));}catch{return choice;}}
+const api={best,bestAsync,baseline,parse,compact,literal,searchSource,searchToken,randomSource,seedAddress,seedToken};root.ShareLinks=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
